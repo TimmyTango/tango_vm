@@ -1,5 +1,8 @@
 # VM Spec
 
+This is a toy implementation of a made-up CPU ISA, VM to run it, and a simple assembler.
+It's written for fun and to practice lower-level programming.
+
 ## Registers
 
 ### 8-bit registers
@@ -37,7 +40,7 @@ Misc/one-off instructions
 Branching
 
 - $01: beq - branch if Z flag = 1
-- $11: bne - branch if ...
+- $11: bne - branch if Z flag = 0
 - $21: blt - branch if C flag = 1
 - $31: ble - branch if C flag = 1 or Z flag = 1
 - $41: bgt - branch if C flag = 0 and Z flag = 0
