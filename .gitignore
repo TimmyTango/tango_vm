@@ -1,0 +1,9 @@
+assets/
+.vscode/
+bin/
+src/vm_core.*
+src/vm_memory.*
+src/vm_text_mode.*
+programs/*.bin
+.DS_Store
+tangovm
