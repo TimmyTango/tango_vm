@@ -13,6 +13,7 @@ class TokenType(Enum):
     LABEL = 7
     LABEL_DEF = 8
     DIRECTIVE = 9
+    EQU_DEF = 10
 
 class Token:
     def __init__(self, token_type: TokenType, value):
@@ -20,7 +21,7 @@ class Token:
         self.value = value
 
     def __repr__(self):
-        if self.type in [TokenType.LABEL, TokenType.LABEL_DEF, TokenType.DIRECTIVE]:
+        if self.type in [TokenType.LABEL, TokenType.LABEL_DEF, TokenType.DIRECTIVE, TokenType.EQU_DEF]:
             return f'{str(self.type)[10:]}("{self.value}")'
         return f'{str(self.type)[10:]}(${self.value:02X})'
 
@@ -56,6 +57,7 @@ instruction_map = {
 
 class Directive(Enum):
     DECL_BYTE = '.byte'
+    EQU = '.equ'
 
 directive_map = [e.value for e in Directive]
 
@@ -81,7 +83,7 @@ def is_indirect_label(word: str) -> bool:
 def is_half_label(word: str) -> bool:
     return word.startswith('<') or word.startswith('>')
 
-def process_number(word: str, last_token: Optional[Token]) -> Optional[Token]:
+def process_number(word: str, first_token: Optional[Token]) -> Optional[Token]:
     token_type = TokenType.ADDRESS
     hexidecimal = False
     value = word
@@ -95,8 +97,8 @@ def process_number(word: str, last_token: Optional[Token]) -> Optional[Token]:
         if not value.endswith(']'): return None
         token_type = TokenType.INDIRECT
         value = value[1:-1]
-    elif last_token and last_token.type == TokenType.DIRECTIVE:
-        if last_token.value == Directive.DECL_BYTE.value:
+    elif first_token and first_token.type == TokenType.DIRECTIVE:
+        if first_token.value == Directive.DECL_BYTE.value:
             token_type = TokenType.IMMEDIATE
 
     if not value: return None
@@ -118,7 +120,7 @@ def process_number(word: str, last_token: Optional[Token]) -> Optional[Token]:
 
     return Token(token_type, int_value)
 
-def process_word(word: str, last_token: Optional[Token]) -> Optional[Token]:
+def process_word(word: str, first_token: Optional[Token]) -> Optional[Token]:
     if word[0] == ';':
         return Token(TokenType.COMMENT, 0)
 
@@ -145,24 +147,26 @@ def process_word(word: str, last_token: Optional[Token]) -> Optional[Token]:
 
     match = re.match(r'[(<|>)]?\[?[a-zA-Z_][\w]+\]?,?$', word)
     if match:
-        return Token(TokenType.LABEL, word)
+        if first_token and first_token.type == TokenType.DIRECTIVE and first_token.value == Directive.EQU.value:
+            return Token(TokenType.EQU_DEF, word)
+        else:
+            return Token(TokenType.LABEL, remove_trailing_comma(word))
 
     if word[0] in ['#', '[', '$'] or re.match(r'[0-9a-fA-F]', word[0]):
-        return process_number(word, last_token)
+        return process_number(word, first_token)
 
     return None
 
 def process_line(line: str) -> List[Token]:
     output: List[Token] = []
     words = list(filter(lambda w: len(w) > 0, line.split(' ')))
-    last_token = None
+    first_token = None
     for word in words:
-        token = process_word(word, last_token)
-        if last_token:
-            if not (last_token.type == TokenType.DIRECTIVE and last_token.value == Directive.DECL_BYTE.value):
-                last_token = token
-        else:
-            last_token = token
+        token = process_word(word, first_token)
+        
+        if first_token is None:
+            first_token = token
+
         if not token:
             print('syntax error?', word)
             return output
@@ -183,6 +187,7 @@ def main():
     args = parser.parse_args()
     
     pc = 0x200
+    equivalents = {}
     labels = {}
     output: List[List[Token]] = []
     with open(args.source_file, 'r') as source:
@@ -190,31 +195,52 @@ def main():
             line = line.strip('\n')
             tokens = process_line(line)
 
+            equ_def = None
+
             for token in tokens:
-                if token.type == TokenType.LABEL_DEF:
+                if equ_def is not None:
+                    equivalents[equ_def] = token
+                    equ_def = None
+                elif token.type == TokenType.LABEL_DEF:
                     if token.value in labels and labels[token.value] != -1:
                             print(f'{line_no}: label "{token.value}" already defined!')
                             return
                     else:
                         labels[token.value.strip('[]')] = pc
+                elif token.type == TokenType.EQU_DEF:
+                    equ_def = token.value
                 elif token.type == TokenType.LABEL:
-                    label: str = token.value
-                    is_indirect = is_indirect_label(label)
-                    label = label.strip('[]')
-                    if label in labels and labels[label] != -1:
-                        token.type = TokenType.INDIRECT if is_indirect else TokenType.ADDRESS
-                        token.value = labels[label]
+                    if token.value in equivalents:
+                        equ_token = equivalents[token.value]
+                        token.type = equ_token.type
+                        token.value = equ_token.value
+
+                        if token.type in [TokenType.ADDRESS, TokenType.INDIRECT]:
+                            pc += 2
+                        elif token.type in [TokenType.IMMEDIATE, TokenType.REGISTER, TokenType.OP_CODE]:
+                            pc += 1
                     else:
-                        labels[token.value] = -1
-                    
-                    if label.startswith('<') or label.startswith('>'):
-                        pc += 1
-                    else:
-                        pc += 2
+                        label: str = token.value
+                        is_indirect = is_indirect_label(label)
+                        label = label.strip('[]')
+                        if label in labels and labels[label] != -1:
+                            token.type = TokenType.INDIRECT if is_indirect else TokenType.ADDRESS
+                            token.value = labels[label]
+                        else:
+                            labels[token.value] = -1
+                        
+                        if label.startswith('<') or label.startswith('>'):
+                            pc += 1
+                        else:
+                            pc += 2
                 elif token.type not in [TokenType.DIRECTIVE, TokenType.ADDRESS, TokenType.INDIRECT]:
                     pc += 1
                 elif token.type in [TokenType.ADDRESS, TokenType.INDIRECT]:
                     pc += 2
+
+                if equ_def is not None and token.type != TokenType.EQU_DEF:
+                    print(f'{line_no}: equ "{equ_def}" not defined!')
+                    return
 
             if tokens:
                 print(f'tokens: {tokens}')
@@ -271,6 +297,8 @@ def main():
                         else:
                             print(f'{line_no}: Unknown mode based on operands')
                             return
+                if tokens[0].type == TokenType.DIRECTIVE and tokens[0].value == Directive.EQU.value:
+                    continue
                 output.append(tokens)
 
     bin_output: List[int] = []

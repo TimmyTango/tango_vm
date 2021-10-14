@@ -1,3 +1,6 @@
+    .equ EQU1 $F000
+    .equ EQU2 $FF00
+
     mov r0, #0              ; r0 = 0 (not really needed)
     mov xl, <data           ; low-byte of x 
     mov xh, >data           ; high-byte of x
@@ -7,9 +10,10 @@ loop:
     cmp r0, data_size       ; compare r0 to data_size (#8)
     bne loop                ; repeat loop if r0 != 8
 
-    mov r1, $F000           ; check reading from ROM
-    mov $FF00, #$7F         ; check writing to ROM
-    mov r2, $FF00           ; should have no effect
+    mov r1, EQU1            ; check reading from ROM
+    mov EQU2, #$7F          ; check writing to ROM
+    mov r2, EQU2            ; should have no effect
+    dbg                     ; print debug info
     end                     ; end of program
 
 push_data:
