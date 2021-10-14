@@ -1,4 +1,5 @@
 #include "vm_cpu.h"
+#include "systems/vm_system.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -23,38 +24,36 @@ static void update_status_reg(uint16_t result) {
 }
 
 static bool is_high_reg(uint8_t reg) {
-    if (reg == R_SH || reg == R_XH || reg == R_YH) {
+    if (reg == R_XH || reg == R_YH) {
         return true;
     }
     return false;
 }
 
 static bool is_word_reg(uint8_t reg) {
-    if (reg == R_SP || reg == R_X || reg == R_Y) {
+    if (reg == R_X || reg == R_Y) {
         return true;
     }
     return false;
 }
 
 void init_cpu() {
-    vm.pc = 0;
-    vm.sp = MAX_MEMORY - 1;
+    vm.pc = 0x0200;
+    vm.as = 0xFF;
+    vm.ds = 0xFF;
     vm.running = true;
 }
 
 uint8_t read_byte(uint16_t addr) {
-    return vm.memory[addr % MAX_MEMORY];
+    return system_read_byte(addr);
 }
 
 uint16_t read_word(uint16_t addr) {
-    uint8_t low = vm.memory[addr % MAX_MEMORY];
-    uint8_t high = vm.memory[(addr + 1) % MAX_MEMORY];
-    uint16_t word = (high << 8) + low;
-    return word;
+    return system_read_word(addr);
 }
 
 void write_byte(uint16_t addr, uint8_t value) {
-    vm.memory[addr % MAX_MEMORY] = value;
+    system_write_byte(addr, value);
 }
 
 void write_bytes(uint16_t start_addr, uint16_t nbytes, uint8_t* bytes) {
@@ -84,14 +83,14 @@ void set_register(uint8_t reg, uint8_t value) {
     }
 
     switch (reg) {
-        case R_SP:
+        case R_ST:
             vm.status = value;
             break;
-        case R_SL:
-            vm.sp = (vm.sp & 0xFF00) + value;
+        case R_AS:
+            vm.as = value;
             break;
-        case R_SH:
-            vm.sp = (vm.sp & 0x00FF) + (value << 8);
+        case R_DS:
+            vm.ds = value;
             break;
         case R_XL:
             vm.x = (vm.x & 0xFF00) + value;
@@ -118,10 +117,10 @@ uint8_t get_register(uint8_t reg) {
     switch (reg) {
         case R_ST:
             return vm.status;
-        case R_SL:
-            return LO_BYTE(vm.sp);
-        case R_SH:
-            return HI_BYTE(vm.sp);
+        case R_AS:
+            return vm.as;
+        case R_DS:
+            return vm.ds;
         case R_XL:
             return LO_BYTE(vm.x);
         case R_XH:
@@ -169,7 +168,7 @@ void sub_register(uint8_t reg, uint8_t value, bool with_borrow) {
 }
 
 void cmp_register(uint8_t reg, uint8_t value) {
-    if (reg < R_COUNT || reg == R_ST) {
+    if (reg < R_COUNT || reg == R_ST || reg == R_AS || reg == R_DS) {
         uint16_t result = get_register(reg) - value;
         update_status_reg(result);
         return;
@@ -204,9 +203,20 @@ void not_register(uint8_t reg) {
 }
 
 void push_byte(uint8_t value) {
-    write_byte(vm.sp--, value);
+    write_byte(COMBINE_TO_WORD(vm.ds--, 0x01), value);
 }
 
 uint8_t pop_byte() {
-    return read_byte(++vm.sp);
+    return read_byte(COMBINE_TO_WORD(++vm.ds, 0x01));
+}
+
+void push_address(uint16_t addr) {
+    write_byte(COMBINE_TO_WORD(vm.as--, 0x00), LO_BYTE(addr));
+    write_byte(COMBINE_TO_WORD(vm.as--, 0x00), HI_BYTE(addr));
+}
+
+uint16_t pop_address() {
+    uint8_t high = read_byte(COMBINE_TO_WORD(++vm.as, 0x00));
+    uint8_t low = read_byte(COMBINE_TO_WORD(++vm.as, 0x00));
+    return COMBINE_TO_WORD(low, high);
 }

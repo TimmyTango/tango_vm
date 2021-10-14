@@ -9,7 +9,7 @@
 #include <assert.h>
 
 static void print_debug() {
-    printf("PC=$%04X SP=$%04X X=$%04X Y=$%04X | ", vm.pc, vm.sp, vm.x, vm.y);
+    printf("PC=$%04X X=$%04X Y=$%04X | AS=$%02X DS=$%02X | ", vm.pc, vm.x, vm.y, vm.as, vm.ds);
     for (int i = 0; i < R_COUNT; i++) {
         printf("r%d=$%02X ", i, get_register(i));
     }
@@ -155,9 +155,11 @@ int main(int argc, char** argv) {
     vm.debug = true;
     vm.step = false;
 
+    uint8_t* prg_start = vm.memory + vm.pc;
+
     FILE* fp = fopen(bin_filename, "rb");
 
-    fread(vm.memory, sizeof(vm.memory[0]), MAX_MEMORY, fp);
+    fread(prg_start, sizeof(vm.memory[0]), MAX_MEMORY - vm.pc, fp);
 
     fclose(fp);
     fp = NULL;
@@ -209,12 +211,11 @@ int main(int argc, char** argv) {
                         not_register(next_byte());
                         break;
                     case 0x70: // jsr
-                        push_byte(HI_BYTE(vm.pc + 2));
-                        push_byte(LO_BYTE(vm.pc + 2));
+                        push_address(vm.pc + 2);
                         vm.pc = next_word();
                         break;
                     case 0x80: // ret
-                        vm.pc = COMBINE_TO_WORD(pop_byte(), pop_byte());
+                        vm.pc = pop_address();
                         break;
                     case 0x01: // beq
                         {
@@ -265,9 +266,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    printf("\nStack\n");
-    for (uint16_t i = 0x0FFF; i > vm.sp; i--) {
-        printf("$%04X: $%02X\n", i, read_byte(i));
+    printf("\nData Stack:\n");
+    for (uint8_t i = 0xFF; i > vm.ds; i--) {
+        printf("$%02X: $%02X\n", i, read_byte(COMBINE_TO_WORD(i, 0x01)));
     }
 
     return 0;

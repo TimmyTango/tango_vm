@@ -12,14 +12,14 @@ It's written for fun and to practice lower-level programming.
     Z: last operation returned 0
     N: last operation returned negative byte (bit 7 set to 1)
     C: last operation set carry flag
-- SL/SH ($9, $A): low/high byte of SP
+- AS ($9): address stack low-byte (high-byte is permanently $00)
+- DS ($A): data stack low-byte (high-byte is permanently $01)
 - XL/XH ($B, $C): low/high byte of X
 - YL/YH ($D, $E): low/high byte of Y
 
 ### 16-bit registers
 
 - PC: program counter
-- SP: stack pointer
 - X: general purpose (useful for pointers to memory)
 - Y: general purpose (useful for pointers to memory)
 
@@ -34,8 +34,8 @@ Misc/one-off instructions
 - $40: clc - clear carry
 - $50: sec - set carry
 - $60: not - bitwise not on reg
-- $70: jsr - jump to sub-routine
-- $80: ret - return from sub-routine
+- $70: jsr - jump to sub-routine (uses address-stack)
+- $80: ret - return from sub-routine (uses address-stack)
 
 Branching
 
@@ -101,7 +101,7 @@ And/Or
 - $67: or reg |= immediate
 - $77: or reg |= indirect
 
-Stack Manipulation
+Stack Manipulation (uses data-stack)
 
 - $08: push reg
 - $18: push mem

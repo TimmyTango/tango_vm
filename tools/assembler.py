@@ -61,15 +61,14 @@ directive_map = [e.value for e in Directive]
 
 special_registers = {
     'st': 0x08,
-    'sl': 0x09,
-    'sh': 0x0A,
+    'as': 0x09,
+    'ds': 0x0A,
     'xl': 0x0B,
     'xh': 0x0C,
     'yl': 0x0D,
     'yh': 0x0E,
     'x': 0xF0,
     'y': 0xF1,
-    'sp': 0xF2,
 }
 
 def remove_trailing_comma(word: str) -> str:
@@ -135,7 +134,7 @@ def process_word(word: str, last_token: Optional[Token]) -> Optional[Token]:
     if match:
         return Token(TokenType.REGISTER, int(match.group(1), 10))
     
-    match = re.match(r'(st|sl|sh|xl|xh|yl|yh|sp|x|y),?$', word_lower)
+    match = re.match(r'(st|xl|xh|yl|yh|as|ds|x|y),?$', word_lower)
     if match:
         reg = match.group(1)
         return Token(TokenType.REGISTER, special_registers[reg])
@@ -183,7 +182,7 @@ def main():
     parser.add_argument('-o', '--out', dest='out_file', metavar='output_file', default='default.rom')
     args = parser.parse_args()
     
-    pc = 0
+    pc = 0x200
     labels = {}
     output: List[List[Token]] = []
     with open(args.source_file, 'r') as source:

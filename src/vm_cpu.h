@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define MAX_MEMORY 0x1000
+#define MAX_MEMORY 0x10000
 
 #define LO_BYTE(word) ((word) & 0xFF)
 #define HI_BYTE(word) ((word) >> 8)
@@ -21,15 +21,14 @@ enum {
     R_R7,
     R_COUNT,
     R_ST = 0x08,
-    R_SL,
-    R_SH,
+    R_AS,
+    R_DS,
     R_XL,
     R_XH,
     R_YL,
     R_YH,
     R_X = 0xF0,
-    R_Y,
-    R_SP
+    R_Y
 };
 
 enum {
@@ -41,11 +40,12 @@ enum {
 typedef struct {
     uint8_t memory[MAX_MEMORY];
     uint8_t registers[R_COUNT];
-    uint8_t status;
-    uint16_t pc;
-    uint16_t sp;
-    uint16_t x;
-    uint16_t y;
+    uint8_t status;         // status flags register
+    uint8_t as;             // address stack pointer
+    uint8_t ds;             // data stack pointer
+    uint16_t pc;            // program counter
+    uint16_t x;             // x register pointer
+    uint16_t y;             // y register pointer
     bool running;
     bool debug;
     bool step;
@@ -78,3 +78,6 @@ void set_flag(uint8_t flag, bool high);
 
 void push_byte(uint8_t value);
 uint8_t pop_byte();
+
+void push_address(uint16_t addr);
+uint16_t pop_address();
