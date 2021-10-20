@@ -1,8 +1,16 @@
 #include "vm_cpu.h"
-#include "systems/vm_system.h"
+#include "vm_system.h"
 
 #include <stdbool.h>
 #include <stdio.h>
+
+vm_host_t vm_host = {
+    .window = NULL,
+    .renderer = NULL,
+    .screen_width = 0,
+    .screen_height = 0,
+    .screen_zoom = 0
+};
 
 uint8_t get_flag(uint8_t flag) {
     return (vm.status & flag) == flag;
@@ -41,7 +49,8 @@ void init_cpu() {
     vm.pc = 0x0200;
     vm.as = 0xFF;
     vm.ds = 0xFF;
-    vm.running = true;
+
+    vm.clock_speed = 1000000;
 }
 
 static void print_debug() {
@@ -174,127 +183,122 @@ static void handle_mov_op(uint8_t instruction) {
     }
 }
 
-void start_cpu_loop() {
-    while (vm.running) {
-        if (vm.debug && vm.step) {
-            getchar();
-        }
+void cpu_cycle() {
+    uint8_t instruction = next_byte();
+    uint8_t op = instruction & 0x0F;
 
-        uint8_t instruction = next_byte();
-        uint8_t op = instruction & 0x0F;
-
-        switch (op) {
-            case 2: // mov
-                handle_mov_op(instruction);
-                break;
-            case 3: // add/adc
-            case 4: // sub/sbb
-            case 5: // cmp
-            case 7: // and/or
-            case 8: // psh/pop
-                // add, sub, cmp ops
-                handle_math_op(instruction);
-                break;
-            default:
-                switch (instruction) {
-                    case 0xff: // end
-                        vm.running = false;
-                        break;
-                    case 0xfe: // dbg
-                        if (!vm.debug) print_debug();
-                        break;
-                    case 0x00: // nop
-                        break;
-                    case 0x10: // jmp
-                        vm.pc = next_word();
-                        break;
-                    case 0x20: // inc
-                        add_register(next_byte(), 1, false);
-                        break;
-                    case 0x30: // dec
-                        sub_register(next_byte(), 1, false);
-                        break;
-                    case 0x40: // clc
-                    case 0x50: // sec
-                        set_flag(FLAG_CARRY, instruction == 0x50);
-                        break;
-                    case 0x60: // not
-                        not_register(next_byte());
-                        break;
-                    case 0x70: // jsr
-                        push_address(vm.pc + 2);
-                        vm.pc = next_word();
-                        break;
-                    case 0x80: // ret
-                        vm.pc = pop_address();
-                        break;
-                    case 0x01: // beq
-                        {
-                            uint16_t addr = next_word();
-                            if (get_flag(FLAG_ZERO)) vm.pc = addr;
-                        }
-                        break;
-                    case 0x11: // bne
-                        {
-                            uint16_t addr = next_word();
-                            if (!get_flag(FLAG_ZERO)) vm.pc = addr;
-                        }
-                        break;
-                    case 0x21: // blt
-                        {
-                            uint16_t addr = next_word();
-                            if (get_flag(FLAG_CARRY)) vm.pc = addr;
-                        }
-                        break;
-                    case 0x31: // ble
-                        {
-                            uint16_t addr = next_word();
-                            if (get_flag(FLAG_CARRY) || get_flag(FLAG_ZERO)) vm.pc = addr;
-                        }
-                        break;
-                    case 0x41: // bgt
-                        {
-                            uint16_t addr = next_word();
-                            if (!get_flag(FLAG_CARRY) && !get_flag(FLAG_ZERO)) vm.pc = addr;
-                        }
-                        break;
-                    case 0x51: // bge
-                        {
-                            uint16_t addr = next_word();
-                            if (get_flag(FLAG_ZERO) || !get_flag(FLAG_CARRY)) vm.pc = addr;
-                        }
-                        break;
-                    default:
-                        handle_bad_instruction(instruction);
-                        break;
-                }
-        }
-
-
-        if (vm.debug) {
-            printf("\n");
-            print_debug();
-        }
+    switch (op) {
+        case 2: // mov 
+            handle_mov_op(instruction);
+            break;
+        case 3: // add/adc
+        case 4: // sub/sbb
+        case 5: // cmp
+        case 7: // and/or
+        case 8: // psh/pop
+            // add, sub, cmp ops
+            handle_math_op(instruction);
+            break;
+        default:
+            switch (instruction) {
+                case 0xff: // end
+                    vm.running = false;
+                    break;
+                case 0xfe: // dbg
+                    if (!vm.debug) print_debug();
+                    break;
+                case 0x00: // nop
+                    break;
+                case 0x10: // jmp
+                    vm.pc = next_word();
+                    break;
+                case 0x20: // inc
+                    add_register(next_byte(), 1, false);
+                    break;
+                case 0x30: // dec
+                    sub_register(next_byte(), 1, false);
+                    break;
+                case 0x40: // clc
+                case 0x50: // sec
+                    set_flag(FLAG_CARRY, instruction == 0x50);
+                    break;
+                case 0x60: // not
+                    not_register(next_byte());
+                    break;
+                case 0x70: // jsr
+                    push_address(vm.pc + 2);
+                    vm.pc = next_word();
+                    break;
+                case 0x80: // ret
+                    vm.pc = pop_address();
+                    break;
+                case 0x01: // beq
+                    {
+                        uint16_t addr = next_word();
+                        if (get_flag(FLAG_ZERO)) vm.pc = addr;
+                    }
+                    break;
+                case 0x11: // bne
+                    {
+                        uint16_t addr = next_word();
+                        if (!get_flag(FLAG_ZERO)) vm.pc = addr;
+                    }
+                    break;
+                case 0x21: // blt
+                    {
+                        uint16_t addr = next_word();
+                        if (get_flag(FLAG_CARRY)) vm.pc = addr;
+                    }
+                    break;
+                case 0x31: // ble
+                    {
+                        uint16_t addr = next_word();
+                        if (get_flag(FLAG_CARRY) || get_flag(FLAG_ZERO)) vm.pc = addr;
+                    }
+                    break;
+                case 0x41: // bgt
+                    {
+                        uint16_t addr = next_word();
+                        if (!get_flag(FLAG_CARRY) && !get_flag(FLAG_ZERO)) vm.pc = addr;
+                    }
+                    break;
+                case 0x51: // bge
+                    {
+                        uint16_t addr = next_word();
+                        if (get_flag(FLAG_ZERO) || !get_flag(FLAG_CARRY)) vm.pc = addr;
+                    }
+                    break;
+                default:
+                    handle_bad_instruction(instruction);
+                    break;
+            }
     }
 
     if (vm.debug) {
-        printf("\nData Stack:\n");
-        for (uint8_t i = 0xFF; i > vm.ds; i--) {
-            printf("$%02X: $%02X\n", i, read_byte(COMBINE_TO_WORD(i, 0x01)));
-        }
+        printf("\n");
+        print_debug();
     }
 
+    // if (vm.debug) {
+    //     printf("\nData Stack:\n");
+    //     for (uint8_t i = 0xFF; i > vm.ds; i--) {
+    //         printf("$%02X: $%02X\n", i, read_byte(COMBINE_TO_WORD(i, 0x01)));
+    //     }
+    // }
 }
 
 uint8_t read_byte(uint16_t addr) {
+    vm.cycle++;
     return system_read_byte(addr);
 }
 
 uint16_t read_word(uint16_t addr) {
+    vm.cycle += 2;
     return system_read_word(addr);
 }
 
 void write_byte(uint16_t addr, uint8_t value) {
+    vm.cycle++;
     system_write_byte(addr, value);
 }
 
@@ -308,6 +312,7 @@ uint8_t next_byte() {
     if (vm.debug) {
         printf("$%02X ", vm.memory[vm.pc]);
     }
+    vm.cycle++;
     return vm.memory[vm.pc++];
 }
 
@@ -346,6 +351,12 @@ void set_register(uint8_t reg, uint8_t value) {
         case R_YH:
             vm.y = (vm.y & 0x00FF) + (value << 8);
             break;
+        case R_X:
+            system_write_byte(vm.x, value);
+            break;
+        case R_Y:
+            system_write_byte(vm.y, value);
+            break;
         default:
             return;
     }
@@ -382,6 +393,7 @@ uint8_t get_register(uint8_t reg) {
 
 void add_register(uint8_t reg, uint8_t value, bool with_carry) {
     if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint16_t result = get_register(reg) + value;
     
         if (with_carry) {
@@ -397,6 +409,7 @@ void add_register(uint8_t reg, uint8_t value, bool with_carry) {
 
 void sub_register(uint8_t reg, uint8_t value, bool with_borrow) {
     if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint16_t result = get_register(reg) - value;
 
         if (with_borrow) {
@@ -411,10 +424,12 @@ void sub_register(uint8_t reg, uint8_t value, bool with_borrow) {
 
 void cmp_register(uint8_t reg, uint8_t value) {
     if (reg < R_COUNT || reg == R_ST || reg == R_AS || reg == R_DS) {
+        vm.cycle++;
         uint16_t result = get_register(reg) - value;
         update_status_reg(result);
         return;
     } else if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint8_t shift_value = is_high_reg(reg) ? 8 : 0;
         update_status_reg(get_register(reg) - (value << shift_value));
     }
@@ -422,6 +437,7 @@ void cmp_register(uint8_t reg, uint8_t value) {
 
 void and_register(uint8_t reg, uint8_t value) {
     if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint16_t result = get_register(reg) & value;
         set_register(reg, (uint8_t)result);
         update_status_reg(result);
@@ -430,6 +446,7 @@ void and_register(uint8_t reg, uint8_t value) {
 
 void or_register(uint8_t reg, uint8_t value) {
     if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint16_t result = get_register(reg) | value;
         set_register(reg, (uint8_t)result);
         update_status_reg(result);
@@ -438,6 +455,7 @@ void or_register(uint8_t reg, uint8_t value) {
 
 void not_register(uint8_t reg) {
     if (!is_word_reg(reg)) {
+        vm.cycle++;
         uint8_t result = ~get_register(reg);
         set_register(reg, result);
         update_status_reg(result);

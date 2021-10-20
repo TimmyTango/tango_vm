@@ -1,6 +1,6 @@
 // #include "vm_core.h"
 
-#include "vm_cpu.h"
+#include "vm_system.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -10,18 +10,17 @@
 
 
 int main(int argc, char** argv) {
-    // atexit(cleanupVm);
-    // if (!initVm()) exit(EXIT_FAILURE);
-    // startVm();
+    atexit(cleanup_system);
 
     if (argc < 2) {
         printf("Missing binary file\n");
         return 1;
     }
 
-    init_cpu();
+    init_system();
     vm.debug = false;
     vm.step = false;
+
     uint8_t* prg_start = vm.memory + vm.pc;
 
     const char* bin_filename = argv[1];
@@ -30,7 +29,7 @@ int main(int argc, char** argv) {
     fclose(fp);
     fp = NULL;
 
-    start_cpu_loop();
+    start_system_loop();
 
     return 0;
 }

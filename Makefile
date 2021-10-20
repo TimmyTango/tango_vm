@@ -1,10 +1,10 @@
 CC = gcc
 CC_FLAGS = -Wall -Wextra -std=c11
 PY = python3
-LINK_FLAGS = ""
+LINK_FLAGS = -lSDL2
 SRC_DIR = src
 MACHINE = game_console
-OBJ = bin/vm_cpu.o bin/${MACHINE}.o
+OBJ = bin/${MACHINE}.o bin/vm_cpu.o 
 
 tangovm: ${SRC_DIR}/main.c ${OBJ}
 	${CC} ${CC_FLAGS} ${LINK_FLAGS} $^ -o $@

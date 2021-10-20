@@ -39,22 +39,28 @@ enum {
 
 typedef struct {
     uint8_t memory[MAX_MEMORY];
+    
     uint8_t registers[R_COUNT];
     uint8_t status;         // status flags register
     uint8_t as;             // address stack pointer
     uint8_t ds;             // data stack pointer
+    
     uint16_t pc;            // program counter
     uint16_t x;             // x register pointer
     uint16_t y;             // y register pointer
+    
     bool running;
     bool debug;
     bool step;
+
+    uint32_t cycle;
+    uint32_t clock_speed;
 } vm_t;
 
 vm_t vm;
 
 void init_cpu();
-void start_cpu_loop();
+void cpu_cycle();
 
 uint8_t read_byte(uint16_t addr);
 uint16_t read_word(uint16_t addr);
