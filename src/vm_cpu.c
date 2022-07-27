@@ -50,7 +50,7 @@ void init_cpu() {
     vm.as = 0xFF;
     vm.ds = 0xFF;
 
-    vm.clock_speed = 1000000;
+    vm.clock_speed = 1000000; // 1Mhz
 }
 
 static void print_debug() {

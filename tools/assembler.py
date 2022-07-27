@@ -58,6 +58,7 @@ instruction_map = {
 class Directive(Enum):
     DECL_BYTE = '.byte'
     EQU = '.equ'
+    ORG = '.org'
 
 directive_map = [e.value for e in Directive]
 
@@ -183,10 +184,13 @@ def split_word_into_bytes(word: int):
 def main():
     parser = argparse.ArgumentParser(description='Assembler for a made-up instruction set')
     parser.add_argument('source_file', metavar='source_file', type=str, help='ASM source file to assemble')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     parser.add_argument('-o', '--out', dest='out_file', metavar='output_file', default='default.rom')
+    parser.add_argument('-l', '--link', dest='linked_roms', metavar='rom_file', type=str, nargs='+',
+                        help='Additional rom files to link')
     args = parser.parse_args()
-    
-    pc = 0x200
+
+    pc = 0
     equivalents = {}
     labels = {}
     output: List[List[Token]] = []
@@ -195,12 +199,29 @@ def main():
             line = line.strip('\n')
             tokens = process_line(line)
 
+            processed_tokens = []
             equ_def = None
+            next_token_sets_pc = False
+            initial_pc = pc
 
             for token in tokens:
                 if equ_def is not None:
                     equivalents[equ_def] = token
                     equ_def = None
+                elif next_token_sets_pc:
+                    if token.type not in [TokenType.ADDRESS, TokenType.IMMEDIATE]:
+                        print(f'{line_no}: Invalid value for .org')
+                        return
+                    if token.value < pc:
+                        print(f'{line_no}: Can only use .org to advance PC')
+                        return
+                    pc = token.value
+                    next_token_sets_pc = False
+                    continue
+                elif token.type == TokenType.DIRECTIVE:
+                    if token.value == Directive.ORG.value:
+                        next_token_sets_pc = True
+                        continue
                 elif token.type == TokenType.LABEL_DEF:
                     if token.value in labels and labels[token.value] != -1:
                             print(f'{line_no}: label "{token.value}" already defined!')
@@ -242,38 +263,40 @@ def main():
                     print(f'{line_no}: equ "{equ_def}" not defined!')
                     return
 
-            if tokens:
-                print(f'tokens: {tokens}')
-                if tokens[0].type == TokenType.OP_CODE:
-                    op = tokens[0].value & 0xF
+                processed_tokens.append(token)
+
+            if processed_tokens:
+                # print(f'tokens: {processed_tokens}')
+                if processed_tokens[0].type == TokenType.OP_CODE:
+                    op = processed_tokens[0].value & 0xF
                     if op in [2, 3, 4, 5, 7, 8]:
-                        if (len(tokens) != 3 and op < 8) or (len(tokens) != 2 and op == 8):
+                        if (len(processed_tokens) != 3 and op < 8) or (len(processed_tokens) != 2 and op == 8):
                             print(f'{line_no}: Unknown mode based on operands')
 
                         if op == 8:
                             op_type1 = TokenType.REGISTER
                             op_value1 = None
-                            op_type2 = tokens[1].type
-                            op_value2 = tokens[1].value
+                            op_type2 = processed_tokens[1].type
+                            op_value2 = processed_tokens[1].value
                         else:
-                            op_type1 = tokens[1].type
-                            op_value1 = tokens[1].value
-                            op_type2 = tokens[2].type
-                            op_value2 = tokens[2].value
+                            op_type1 = processed_tokens[1].type
+                            op_value1 = processed_tokens[1].value
+                            op_type2 = processed_tokens[2].type
+                            op_value2 = processed_tokens[2].value
 
                         if op_type1 == TokenType.REGISTER:
                             pass
                         elif op_type1 == TokenType.ADDRESS:
-                            tokens[0].value += 0x40
+                            processed_tokens[0].value += 0x40
                         elif op_type1 == TokenType.INDIRECT:
-                            tokens[0].value += 0x80
+                            processed_tokens[0].value += 0x80
                         elif op_type1 == TokenType.LABEL:
                             if is_indirect_label(op_value1):
-                                tokens[0].value += 0x80
+                                processed_tokens[0].value += 0x80
                             elif is_half_label(op_value1):
                                 pass
                             else:
-                                tokens[0].value += 0x40
+                                processed_tokens[0].value += 0x40
 
                         else:
                             print(f'{line_no}: Unknown mode based on operands')
@@ -282,29 +305,31 @@ def main():
                         if op_type2 == TokenType.REGISTER:
                             pass
                         elif op_type2 == TokenType.ADDRESS:
-                            tokens[0].value += 0x10
+                            processed_tokens[0].value += 0x10
                         elif op_type2 == TokenType.IMMEDIATE:
-                            tokens[0].value += 0x20
+                            processed_tokens[0].value += 0x20
                         elif op_type2 == TokenType.INDIRECT:
-                            tokens[0].value += 0x30
+                            processed_tokens[0].value += 0x30
                         elif op_type2 == TokenType.LABEL:
                             if is_indirect_label(op_value2):
-                                tokens[0].value += 0x30
+                                processed_tokens[0].value += 0x30
                             elif is_half_label(op_value2):
-                                tokens[0].value += 0x20
+                                processed_tokens[0].value += 0x20
                             else:
-                                tokens[0].value += 0x10
+                                processed_tokens[0].value += 0x10
                         else:
                             print(f'{line_no}: Unknown mode based on operands')
                             return
-                if tokens[0].type == TokenType.DIRECTIVE and tokens[0].value == Directive.EQU.value:
+                if processed_tokens[0].type == TokenType.DIRECTIVE and processed_tokens[0].value == Directive.EQU.value:
                     continue
-                output.append(tokens)
+                output.append((initial_pc, processed_tokens))
 
-    bin_output: List[int] = []
-
-    for line_no, line in enumerate(output):
-        mem_map = f'${len(bin_output):04X}:'
+    file_output = []
+    
+    for line_no, (pc, line) in enumerate(output):
+        if args.verbose:
+            print(line)
+        mem_map = f'${pc:04X}:'
         for token in line:
             if token.type in [TokenType.DIRECTIVE, TokenType.LABEL_DEF]:
                 continue
@@ -344,22 +369,25 @@ def main():
 
             if token.type in [TokenType.ADDRESS, TokenType.INDIRECT]:
                 low, high = split_word_into_bytes(token.value)
-                bin_output.append(low)
-                bin_output.append(high)
                 mem_map += f' ${low:02X} ${high:02X}'
-
             else:
-                bin_output.append(token.value)
                 mem_map += f' ${token.value:02X}'
 
         if len(mem_map) > 6:
-            print(mem_map)
+            file_output.append(f'{mem_map.replace("$", "")}\n')
+            if args.verbose:
+                print(mem_map)
 
     
-    bin_array = bytearray(bin_output)
+    with open(args.out_file, 'w') as out_file:
+        for data in file_output:
+            out_file.write(data)
 
-    with open(args.out_file, 'wb') as out_file:
-        out_file.write(bin_array)
+        for rom in args.linked_roms:
+            if args.verbose:
+                print(f'Linking {rom}')
+            with open(rom, 'r') as linked_rom_file:
+                out_file.write(linked_rom_file.read())
 
 if __name__ == '__main__':
     main()

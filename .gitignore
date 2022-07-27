@@ -4,6 +4,8 @@ bin/
 src/vm_core.*
 src/vm_memory.*
 src/vm_text_mode.*
-programs/*.bin
+programs/*.rom
 .DS_Store
 tangovm
+venv/
+__pycache__/

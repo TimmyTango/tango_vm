@@ -8,6 +8,8 @@
 #define LO_BYTE(word) ((word) & 0xFF)
 #define HI_BYTE(word) ((word) >> 8)
 #define COMBINE_TO_WORD(lowb, highb) (((uint16_t)(highb) << 8) + (lowb))
+#define SET_BIT(bitfield, bit) (bitfield |= 1 << bit)
+#define CLEAR_BIT(bitfield, bit) (bitfield &= ~(1 << bit))
 
 // general purpose regisers r0-r7
 enum {

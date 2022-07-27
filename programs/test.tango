@@ -1,0 +1,19 @@
+globals {
+    const byte A = 10;
+    var byte n = 0;
+}
+
+proc byte get_A() {
+    return A;
+}
+
+proc void add_to_n(byte a) {
+    n = (+ n get_A());
+}
+
+main {
+    #repeat 5 {
+        #add_to_n();
+    #}
+    # n == 50
+}

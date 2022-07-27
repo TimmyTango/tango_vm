@@ -1,6 +1,6 @@
 CC = gcc
 CC_FLAGS = -Wall -Wextra -std=c11
-PY = python3
+PY = venv/bin/python3
 LINK_FLAGS = -lSDL2
 SRC_DIR = src
 MACHINE = game_console
@@ -15,13 +15,19 @@ bin/%.o: src/%.c
 bin/${MACHINE}.o: src/systems/${MACHINE}/vm_system.c
 	${CC} -c -o $@ $< ${CC_FLAGS}
 
-asm_test: programs/test.bin
+asm_test: programs/test.rom
 
-programs/test.bin: programs/test.asm
-	python3 tools/assembler.py programs/test.asm -o programs/test.bin
+programs/tiles.rom: assets/tiles.png tools/png_conv.py
+	${PY} tools/png_conv.py assets/tiles.png -o programs/tiles.rom
+
+programs/test.rom: programs/test.asm tools/assembler.py programs/tiles.rom
+	${PY} tools/assembler.py programs/test.asm -o programs/test.rom -l programs/tiles.rom
 
 test: asm_test tangovm
-	./tangovm programs/test.bin
+	./tangovm programs/test.rom
 
 clean:
 	rm -r bin/*.o
+
+compile:
+	${PY} -m tools.compiler programs/test.tango
