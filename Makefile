@@ -1,7 +1,7 @@
 CC = gcc
-CC_FLAGS = -Wall -Wextra -std=c11
+CC_FLAGS = -Wall -Wextra -std=c11 `sdl2-config --cflags`
 PY = venv/bin/python3
-LINK_FLAGS = -lSDL2
+LINK_FLAGS = `sdl2-config --libs` -lSDL2
 SRC_DIR = src
 MACHINE = game_console
 OBJ = bin/${MACHINE}.o bin/vm_cpu.o 
