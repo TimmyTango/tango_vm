@@ -109,7 +109,6 @@ move_down:
 move_up:
     mov r0, SPRITE1_Y
     dec r0
-    blt wrap_to_144
     mov SPRITE1_Y, r0
     ret
 
